@@ -346,25 +346,34 @@ class PySCF (AnalysisBase):
 if __name__ == '__main__':
 
     import pdb2charge
-    chg_list = pdb2charge.pdb2charge('old_solvent_nomol.pdb')
+    import sys
+
+    pdb = sys.argv[1]
+    dcd = sys.argv[2]
+    output = pdb.split('.')[0]
+
+    results = {}
+    chg_list = pdb2charge.pdb2charge(pdb)
 
     #u = mda.Universe('old_solvent.pdb', 'old_positions_solvent.dcd')
-    u = mda.Universe('old_solvent.pdb', 'test.dcd')
+    u = mda.Universe(pdb, dcd)
 
     qm_ag = u.select_atoms('resname MOL')
 
     # (1) Test QM without MM
     mda_pyscf = PySCF(qm_ag, method='scf')
-    mda_pyscf.run(start=0, stop=4)
+    mda_pyscf.run(start=0, stop=100,verbose=True)
     etot = mda_pyscf.energy_tot()
-    print('etot of QM', etot)
+    results['QM'] = etot
 
     # (2) Test QM with MM and the polarization energy
     mda_pyscf = PySCF(qm_ag, method='scf', l_mm=True,
                       mm_chg=chg_list, l_epol=True)
-    mda_pyscf.run(start=0, stop=4)
+    mda_pyscf.run(start=0, stop=100,verbose=True)
     etot = mda_pyscf.energy_tot()
     epol = mda_pyscf.energy_pol()
 
-    print('etot of QMMM', etot)
-    print('epol of QM embedded in MM', epol)
+    results['QMMM'] = etot
+    results['Epol'] = epol
+
+    np.save(output,results) 

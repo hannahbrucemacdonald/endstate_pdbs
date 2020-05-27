@@ -4,7 +4,7 @@ from simtk.unit import elementary_charge
 from math import floor
 import numpy
 
-def pdb2charge (fname_pdb):
+def pdb2charge(fname_pdb):
     '''
     read pdb file and forcefield files and then
     return charges
@@ -17,7 +17,12 @@ def pdb2charge (fname_pdb):
     pdb = PDBFile (fname_pdb)
     ff  = ForceField ('amber14/protein.ff14SB.xml', 'amber14/tip3p.xml')
     
-    sys = ff.createSystem (pdb.topology)
+    m = Modeller(pdb.topology, pdb.positions)
+    ligand = [r for r in pdb.topology.residues() if r.name == 'MOL']
+    
+    m.delete(ligand)
+    
+    sys = ff.createSystem(m.topology)
 
 
     for i in range (sys.getNumForces()):
