@@ -271,8 +271,14 @@ class PySCF (AnalysisBase):
             cell_list = _init_cell_list(ndim)
             for ja, rj in enumerate(mm_crd):
                 jcel = np.array(rj//rcut_cell, dtype=np.int32)
-                ic, jc, kc = jcel - (jcel//ndim)*ndim
-                cell_list[(ic, jc, kc)].append(ja)
+                ic, jc, kc = jcel
+                rj0 = rj
+                if (ic, jc, kc) not in cell_list:
+                    #print('mm atoms outside unitcell', jcel)
+                    ic, jc, kc = jcel - (jcel//ndim)*ndim
+                    rj0 = rj - (jcel//ndim)*ndim
+
+                cell_list[(ic, jc, kc)].append([self.mm_chg[ja], rj0])
 
             # (5.3) Generate a cell_list that is within cutoff distance
             #       from the QM molecule
@@ -293,24 +299,24 @@ class PySCF (AnalysisBase):
                     jbox = (jcel//ndim)*unitcell
                     ic, jc, kc = jcel + jmove
 
-                    for jatom in cell_list[(ic, jc, kc)]:
-                        rj = mm_crd[jatom]+jbox
+                    for qj, rj0 in cell_list[(ic, jc, kc)]:  # mm_crd
+                        rj = rj0+jbox
                         rij2_min = rcut2 + 100.0
 
-                        for ri in crd:
+                        for ri in crd:  # QM
                             dij = ri - rj
                             rij2 = np.einsum('i,i', dij, dij)
                             rij2_min = min(rij2, rij2_min)
 
                         if rij2_min < rcut2:
                             mm_cut.append(rj)
-                            qq_cut.append(self.mm_chg[jatom])
+                            qq_cut.append(qj)
 
             else:
                 for ic, jc, kc in qm_ncell_list:
                     if (ic, jc, kc) in cell_list:
-                        for jatom in cell_list[(ic, jc, kc)]:
-                            rj = mm_crd[jatom]
+
+                        for qj, rj in cell_list[(ic, jc, kc)]:
                             rij2_min = rcut2 + 100.0
 
                             for ri in crd:
@@ -320,7 +326,7 @@ class PySCF (AnalysisBase):
 
                             if rij2_min < rcut2:
                                 mm_cut.append(rj)
-                                qq_cut.append(self.mm_chg[jatom])
+                                qq_cut.append(qj)
 
             mm_cut = np.array(mm_cut)
             qq_cut = np.array(qq_cut)
@@ -330,7 +336,15 @@ class PySCF (AnalysisBase):
             if self.l_epol:
                 e_pol = _get_epol(mf_qmmm, mf)
 
+            with open(f'QMMM{len(self.etot)}.xyz','w') as f:
+                natom = len(atm_list) + len(mm_cut)
+                for sym, xyz in atm_list:
+                    f.write(f'{sym} {xyz[0]/ang2bohr} {xyz[1]/ang2bohr} {xyz[2]/ang2bohr}\n')
+                for rj in mm_cut:
+                    f.write(f'H {rj[0]/ang2bohr} {rj[1]/ang2bohr} {rj[2]/ang2bohr}\n')
+
         print('etot', self._frame_index, e_tot)
+        print('epol', self._frame_index, e_pol)
         self.etot.append(e_tot)
         self.epol.append(e_pol)
 
@@ -359,6 +373,14 @@ if __name__ == '__main__':
     u = mda.Universe(pdb, dcd)
 
     qm_ag = u.select_atoms('resname MOL')
+    # (2) Test QM with MM and the polarization energy
+    mda_pyscf = PySCF(qm_ag, method='scf', l_mm=True,
+                      mm_chg=chg_list, l_epol=True)
+    mda_pyscf.run(start=0, stop=100,verbose=True)
+    etot = mda_pyscf.energy_tot()
+    epol = mda_pyscf.energy_pol()
+    results['QMMM'] = etot
+    results['Epol'] = epol
 
     # (1) Test QM without MM
     mda_pyscf = PySCF(qm_ag, method='scf')
@@ -366,14 +388,6 @@ if __name__ == '__main__':
     etot = mda_pyscf.energy_tot()
     results['QM'] = etot
 
-    # (2) Test QM with MM and the polarization energy
-    mda_pyscf = PySCF(qm_ag, method='scf', l_mm=True,
-                      mm_chg=chg_list, l_epol=True)
-    mda_pyscf.run(start=0, stop=100,verbose=True)
-    etot = mda_pyscf.energy_tot()
-    epol = mda_pyscf.energy_pol()
 
-    results['QMMM'] = etot
-    results['Epol'] = epol
 
     np.save(output,results) 
