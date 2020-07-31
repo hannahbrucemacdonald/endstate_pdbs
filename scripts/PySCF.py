@@ -276,7 +276,7 @@ class PySCF (AnalysisBase):
                 if (ic, jc, kc) not in cell_list:
                     #print('mm atoms outside unitcell', jcel)
                     ic, jc, kc = jcel - (jcel//ndim)*ndim
-                    rj0 = rj - (jcel//ndim)*ndim
+                    rj0 = rj - (jcel//ndim)*unitcell
 
                 cell_list[(ic, jc, kc)].append([self.mm_chg[ja], rj0])
 
@@ -284,7 +284,8 @@ class PySCF (AnalysisBase):
             #       from the QM molecule
             qm_ncell_list = []
             for ia, ri in enumerate(crd):
-                icel = np.array(ri//self.rcut_half, dtype=np.int32)
+                #icel = np.array(ri//self.rcut_half, dtype=np.int32)
+                icel = np.array(ri//rcut_cell, dtype=np.int32)
                 ncel = icel + self.neigh_list
 
                 for ic, jc, kc in ncel:
